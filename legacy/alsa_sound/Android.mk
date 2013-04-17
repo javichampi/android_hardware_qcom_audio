@@ -78,6 +78,10 @@ ifeq ($(BOARD_AUDIO_EXPECTS_MIN_BUFFERSIZE),true)
     LOCAL_CFLAGS += -DSET_MIN_PERIOD_BYTES
 endif
 
+ifeq ($(BOARD_AUDIO_CAF_LEGACY_INPUT_BUFFERSIZE),true)
+    LOCAL_CFLAGS += -DCAF_LEGACY_INPUT_BUFFER_SIZE
+endif
+
 LOCAL_SRC_FILES := \
   AudioHardwareALSA.cpp         \
   AudioStreamOutALSA.cpp        \
