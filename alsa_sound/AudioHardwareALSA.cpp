@@ -1331,7 +1331,6 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         }
       if(voipstream_active == false) {
          mVoipOutStreamCount = 0;
-         mVoipMicMute = false;
          alsa_handle_t alsa_handle;
          unsigned long bufferSize;
          if(*sampleRate == VOIP_SAMPLING_RATE_8K) {
@@ -1704,7 +1703,6 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         }
         if(voipstream_active == false) {
            mVoipInStreamCount = 0;
-           mVoipMicMute = false;
            alsa_handle_t alsa_handle;
            unsigned long bufferSize;
            if(*sampleRate == VOIP_SAMPLING_RATE_8K) {
