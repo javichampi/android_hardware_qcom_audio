@@ -113,6 +113,10 @@ ALSADevice::ALSADevice() {
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
     mProxyParams.mProxyPcmHandle = NULL;
 
+#ifdef SEPERATED_AUDIO_INPUT
+    mInputSource = AUDIO_SOURCE_DEFAULT;
+#endif
+
     ALOGD("ALSA module opened");
 }
 
