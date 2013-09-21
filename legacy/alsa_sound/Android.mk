@@ -94,6 +94,10 @@ ifeq ($(BOARD_AUDIO_CAF_LEGACY_INPUT_BUFFERSIZE),true)
     common_cflags += -DCAF_LEGACY_INPUT_BUFFER_SIZE
 endif
 
+ifeq ($(BOARD_HAVE_AUDIENCE_ES310),true)
+    common_cflags += -DUSE_ES310
+endif
+
 ifeq ($(BOARD_HAVE_NEW_QCOM_CSDCLIENT),true)
     common_cflags += -DNEW_CSDCLIENT
 endif

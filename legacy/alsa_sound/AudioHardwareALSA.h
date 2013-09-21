@@ -401,6 +401,18 @@ private:
     };
     struct proxy_params mProxyParams;
 
+#ifdef USE_ES310
+    int mES310Fd;
+    int mES310Mode;
+    int mES310Preset;
+    Mutex mES310Lock;
+
+    int setES310Mode(int mode);
+    int setES310Preset(int preset);
+    int initES310(bool reset);
+    int setES310Route(int mode, int device);
+#endif
+
 };
 
 // ----------------------------------------------------------------------------
