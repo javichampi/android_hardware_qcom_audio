@@ -17,6 +17,9 @@ endif
 ifneq ($(strip $(QCOM_AUDIO_FORMAT_ENABLED)),false)
     common_cflags += -DQCOM_AUDIO_FORMAT_ENABLED
 endif
+ifeq ($(strip $(QCOM_MULTI_VOICE_SESSION_ENABLED)),true)
+    LOCAL_CFLAGS += -DQCOM_MULTI_VOICE_SESSION_ENABLED
+endif
 ifneq ($(strip $(QCOM_CSDCLIENT_ENABLED)),false)
     common_cflags += -DQCOM_CSDCLIENT_ENABLED
 endif
