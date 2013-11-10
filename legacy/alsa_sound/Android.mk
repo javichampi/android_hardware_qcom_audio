@@ -98,6 +98,14 @@ ifeq ($(BOARD_AUDIO_CAF_LEGACY_INPUT_BUFFERSIZE),true)
     LOCAL_CFLAGS += -DCAF_LEGACY_INPUT_BUFFER_SIZE
 endif
 
+ifeq ($(BOARD_HAVE_NEW_QCOM_CSDCLIENT),true)
+  LOCAL_CFLAGS += -DNEW_CSDCLIENT
+endif
+
+ifeq ($(BOARD_HAVE_CSD_FAST_CALL_SWITCH),true)
+  LOCAL_CFLAGS += -DCSD_FAST_CALL_SWITCH
+endif
+
 LOCAL_SRC_FILES := \
   AudioHardwareALSA.cpp         \
   AudioStreamOutALSA.cpp        \
