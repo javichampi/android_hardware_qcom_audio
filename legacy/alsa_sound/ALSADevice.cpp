@@ -2128,6 +2128,14 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                 }
 #endif
                 else {
+#ifdef USE_ES310
+					if (mCallMode == AudioSystem::MODE_IN_CALL) {
+						return strdup(SND_USE_CASE_DEV_VOC_LINE); /* VOICE BUILTIN-MIC TX */
+					}
+					else {
+						return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+					}
+#endif
                     if ((rxDevice != NULL) &&
                         !strncmp(rxDevice, SND_USE_CASE_DEV_ANC_HANDSET,
                             strlen(SND_USE_CASE_DEV_ANC_HANDSET) + 1)) {
