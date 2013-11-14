@@ -48,7 +48,7 @@ ifneq ($(strip $(QCOM_TUNNEL_LPA_ENABLED)),false)
     common_cflags += -DQCOM_TUNNEL_LPA_ENABLED
 endif
 
-ifeq ($(call is-board-platform,msm8974),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8974)
     common_cflags += -DTARGET_8974
 endif
 
@@ -170,15 +170,15 @@ LOCAL_C_INCLUDES += system/media/audio_utils/include
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
-ifeq ($(call is-board-platform,msm8974),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8974)
   LOCAL_MODULE := audio.primary.msm8974
 endif
 
-ifeq ($(call is-board-platform,msm8960),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
   LOCAL_MODULE := audio.primary.msm8960
 endif
 
-ifeq ($(call is-board-platform,msm8610),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8610)
   LOCAL_MODULE := audio.primary.msm8610
 endif
 
@@ -195,15 +195,15 @@ LOCAL_SRC_FILES := \
     audio_policy_hal.cpp \
     AudioPolicyManagerALSA.cpp
 
-ifeq ($(call is-board-platform,msm8974),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8974)
   LOCAL_MODULE := audio_policy.msm8974
 endif
 
-ifeq ($(call is-board-platform,msm8960),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
   LOCAL_MODULE := audio_policy.msm8960
 endif
 
-ifeq ($(call is-board-platform,msm8610),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8610)
   LOCAL_MODULE := audio_policy.msm8610
 endif
 
