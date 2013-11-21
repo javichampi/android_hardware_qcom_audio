@@ -2166,7 +2166,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
         } else if (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
         } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
-#ifdef USE_ES310
+#if defined(USE_ES310) || defined(TAURUS)
             if (mCallMode == AUDIO_MODE_IN_CALL ||
                 mCallMode == AUDIO_MODE_IN_COMMUNICATION)
             {
