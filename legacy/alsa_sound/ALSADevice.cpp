@@ -237,6 +237,8 @@ int ALSADevice::setES310Route(int mode, int device)
     int rc = 0;
     bool bVRMode = false;
     char buf[255] = "0";
+	char cVNRMode[255]="2";
+	int VNRMode = 2;
     ES310_PathID dwNewPath = ES310_PATH_SUSPEND;
     unsigned int dwNewPreset = -1;
 
@@ -247,6 +249,13 @@ int ALSADevice::setES310Route(int mode, int device)
     else
         bVRMode = 0;
     ALOGD("VRMode:%d", bVRMode);
+
+    property_get("persist.audio.vns.mode",cVNRMode,"2");
+    if (!strncmp("1", cVNRMode, 1)) {
+        VNRMode = 1;
+    } else {
+        VNRMode = 2;
+    }
 
     if (mode == AudioSystem::MODE_IN_CALL ||
         mode == AudioSystem::MODE_RINGTONE) {
@@ -287,6 +296,7 @@ int ALSADevice::setES310Route(int mode, int device)
             dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB;
             break;
         }
+		goto ROUTE;
     }
     else if (mode == AudioSystem::MODE_IN_COMMUNICATION) {
         switch (device & AudioSystem::DEVICE_OUT_ALL) {
@@ -326,6 +336,7 @@ int ALSADevice::setES310Route(int mode, int device)
             dwNewPreset = ES310_PRESET_HANDSET_VOIP_WB;
             break;
         }
+		goto ROUTE;
     }
         else {
         switch (device & AudioSystem::DEVICE_IN_ALL)
@@ -343,7 +354,7 @@ int ALSADevice::setES310Route(int mode, int device)
             if (bVRMode)
                 dwNewPreset = ES310_PRESET_VOICE_RECOGNIZTION_WB;
             else
-                dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
+                dwNewPreset = ES310_PRESET_ANALOG_BYPASS;
             break;
         case AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET:
             dwNewPath = ES310_PATH_HEADSET;
@@ -351,7 +362,7 @@ int ALSADevice::setES310Route(int mode, int device)
             break;
         case AudioSystem::DEVICE_IN_WIRED_HEADSET:
             dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HEADSET_REC_WB;
+            dwNewPreset = ES310_PRESET_HEADSET_MIC_ANALOG_BYPASS;
             break;
         case AudioSystem::DEVICE_IN_AUX_DIGITAL:
         case AudioSystem::DEVICE_IN_VOICE_CALL:
@@ -361,8 +372,18 @@ int ALSADevice::setES310Route(int mode, int device)
             break;
         default:
             dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSFREE_REC_NB;
+            dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
             break;
+        }
+    }
+ROUTE:
+    if (VNRMode == 1) {
+        ALOGE("Switch to 1-Mic Solution");
+        if (dwNewPreset == ES310_PRESET_HANDSET_INCALL_NB) {
+            dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB_1MIC;
+        }
+        if (dwNewPreset == ES310_PRESET_HANDSET_VOIP_WB) {
+            dwNewPreset = ES310_PRESET_HANDSET_INCALL_VOIP_WB_1MIC;
         }
     }
 
