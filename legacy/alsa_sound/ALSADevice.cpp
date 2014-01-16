@@ -26,9 +26,6 @@
 #include <media/AudioRecord.h>
 #include <dlfcn.h>
 #include <math.h>
-#ifdef USE_ES310
-#include <sound/es310.h>
-#endif
 
 extern "C" {
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -85,7 +82,81 @@ namespace sys_close {
 namespace android_audio_legacy
 {
 
+#ifdef USE_ES310
+//XIAOMI_START
+void *ALSADevice::csdThreadWrapper(void *me) {
+    static_cast<ALSADevice *>(me)->csdThreadEntry();
+    return NULL;
+}
+
+void ALSADevice::csdThreadEntry() {
+    ALOGV("ALSADevice::csdThreadEntry +");
+    pid_t tid  = gettid();
+    int err;
+    int command_size = 0;
+    androidSetThreadPriority(tid, ANDROID_PRIORITY_URGENT_AUDIO);
+    m_csdCmd = CMD_CSD_READY;
+    while(!m_killcsdThread) {
+        while (!CSDCmdQueue.empty())  {
+            List<CSDCommand>::iterator it = CSDCmdQueue.begin();
+            CSDCommand csdcommand = *it;
+            ALOGE("CSDCommand, cmd:%d, rx:%d, tx:%d, flag:%d",
+                csdcommand.cmd, csdcommand.rx_id, csdcommand.tx_id, csdcommand.devSetFlag);
+            switch (csdcommand.cmd)
+            {
+                case CMD_CSD_START_VOICE:
+                {
+                    ALOGV("ALSADevice::csdThreadEntry, csd_client_start_voice");
+                    err = csd_start_voice();
+                    if (err < 0) {
+                        ALOGE("startVoiceCall: CMD_CSD_START_VOICE error %d\n", err);
+                    }
+                    break;
+                }
+                case CMD_CSD_END_VOICE:
+                {
+                    ALOGV("ALSADevice::csdThreadEntry, csd_client_stop_voice");
+                    err = csd_stop_voice();
+                    if (err < 0) {
+                        ALOGE("s_close: CMD_CSD_END_VOICE error %d\n", err);
+                    }
+                    break;
+                }
+                case CMD_CSD_ENABLE_DEVICE:
+                    ALOGV("ALSADevice::csdThreadEntry, csd_client_enable_device");
+                    err = csd_enable_device(csdcommand.rx_id, csdcommand.tx_id, csdcommand.devSetFlag);
+                    if (err < 0) {
+                        ALOGE("s_close: CMD_CSD_DISABLE_DEVICE error %d\n", err);
+                    }
+                    break;
+                case CMD_CSD_DISABLE_DEVICE:
+                    ALOGV("ALSADevice::csdThreadEntry, csd_client_disable_device");
+                    err = csd_disable_device();
+                    if (err < 0) {
+                        ALOGE("s_close: CMD_CSD_DISABLE_DEVICE error %d\n", err);
+                    }
+                    break;
+                default:
+                    m_csdCmd = CMD_CSD_READY;
+            }
+            CSDCmdQueue.erase(it);
+        }
+        pthread_mutex_lock(&m_csd_mutex);
+        pthread_cond_wait(&m_csd_cv, &m_csd_mutex);
+        pthread_mutex_unlock(&m_csd_mutex);
+        if (CSDCmdQueue.size() != 0)
+            ALOGV("CSD command size:%d", CSDCmdQueue.size());
+        continue;
+    }
+    ALOGV("ALSADevice::csdThreadEntry -");
+}
+//XIAOMI_END
+//XIAOMI_START
+ALSADevice::ALSADevice(AudioHardwareALSA* parent) {
+#else
 ALSADevice::ALSADevice() {
+#endif
+//XIAOMI_END
     mSSRComplete = false;
 #ifdef USES_FLUENCE_INCALL
     mDevSettingsFlag = TTY_OFF | DMIC_FLAG;
@@ -129,11 +200,18 @@ ALSADevice::ALSADevice() {
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
     mProxyParams.mProxyPcmHandle = NULL;
 
+//XIAOMI_START
 #ifdef USE_ES310
-    mES310Fd = -1;
-    mES310Mode = ES310_PRESET_AUDIOPATH_DISABLE;
-    initES310(true);
+    mPrevDevice = 0;
+    mParent = parent;
+    pthread_mutex_init(&m_csd_mutex, NULL);
+    pthread_cond_init (&m_csd_cv, NULL);
+    m_killcsdThread = false;
+    m_csdCmd = CMD_CSD_READY;
+    ALOGV("Creating CSD Thread");
+    pthread_create(&csdThread, NULL, csdThreadWrapper, this);
 #endif
+//XIAOMI_END
 
 #ifdef SEPERATED_AUDIO_INPUT
     mInputSource = AUDIO_SOURCE_DEFAULT;
@@ -151,7 +229,14 @@ ALSADevice::~ALSADevice()
         mProxyParams.mCaptureBuffer = NULL;
     }
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
-
+//XIAOMI_START
+#ifdef USE_ES310
+    m_killcsdThread = true;
+    pthread_cond_signal(&m_csd_cv);
+    pthread_join(csdThread,NULL);
+    ALOGV("CSD Thread Killed");
+#endif
+//XIAOMI_END
 }
 
 static bool isPlatformFusion3() {
@@ -164,236 +249,6 @@ static bool isPlatformFusion3() {
     else
         return false;
 }
-
-#ifdef USE_ES310
-int ALSADevice::initES310(bool reset) {
-    int rc = 0;
-
-    if (mES310Fd < 0) {
-        mES310Fd = ::open("/dev/audience_es310", O_RDWR);
-        if (!mES310Fd) {
-            ALOGE("%s: unable to open es310 device!", __func__);
-            return -1;
-        } else {
-            ALOGI("%s: device opened, fd=%d", __func__, mES310Fd);
-        }
-    }
-
-    if(reset) {
-        rc = ioctl(mES310Fd, ES310_RESET_CMD);
-        if (rc < 0) {
-            ALOGE("%s: failed to reset es310 device, errno=%d", __func__, errno);
-            return rc;
-        }
-    }
-
-    return rc;
-}
-
-int ALSADevice::setES310Mode(int mode)
-{
-    Mutex::Autolock autoLock(mES310Lock);
-    int rc = -1;
-
-    if (mES310Mode != mode) {
-        if (mES310Fd < 0) {
-            initES310(false);
-        }
-
-        rc = ioctl(mES310Fd, ES310_SET_CONFIG, &mode);
-        if (rc < 0)
-            ALOGE("%s: ioctl failed, errno=%d", __func__, errno);
-        else {
-            mES310Mode = mode;
-            ALOGD("%s: set mode=%d", __func__, mode);
-        }
-    }
-    return rc;
-}
-
-int ALSADevice::setES310Preset(int preset)
-{
-    Mutex::Autolock autoLock(mES310Lock);
-    int rc = -1;
-
-    if (mES310Preset != preset) {
-        if (mES310Fd < 0) {
-            initES310(false);
-        }
-
-        rc = ioctl(mES310Fd, ES310_SET_PRESET, &preset);
-        if (rc < 0)
-            ALOGE("%s: ioctl failed, errno=%d", __func__, errno);
-        else {
-            mES310Preset = preset;
-            ALOGD("%s: set preset=%d", __func__, preset);
-        }
-    }
-    return rc;
-}
-
-int ALSADevice::setES310Route(int mode, int device)
-{
-    int rc = 0;
-    bool bVRMode = false;
-    char buf[255] = "0";
-	char cVNRMode[255]="2";
-	int VNRMode = 2;
-    ES310_PathID dwNewPath = ES310_PATH_SUSPEND;
-    unsigned int dwNewPreset = -1;
-
-    // get VRMode
-    property_get("audio.record.vrmode", buf, "0");
-    if (!strncmp("1", buf, 1))
-        bVRMode = 1;
-    else
-        bVRMode = 0;
-    ALOGD("VRMode:%d", bVRMode);
-
-    property_get("persist.audio.vns.mode",cVNRMode,"2");
-    if (!strncmp("1", cVNRMode, 1)) {
-        VNRMode = 1;
-    } else {
-        VNRMode = 2;
-    }
-
-    if (mode == AudioSystem::MODE_IN_CALL ||
-        mode == AudioSystem::MODE_RINGTONE) {
-        switch (device & AudioSystem::DEVICE_OUT_ALL) {
-        case AudioSystem::DEVICE_OUT_EARPIECE:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB;
-            break;
-        case AudioSystem::DEVICE_OUT_SPEAKER:
-            dwNewPath = ES310_PATH_HANDSFREE;
-            dwNewPreset = ES310_PRESET_HANDSFREE_INCALL_NB;
-            break;
-        case AudioSystem::DEVICE_OUT_WIRED_HEADSET:
-            dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HEADSET_INCALL_NB;
-            break;
-        case AudioSystem::DEVICE_OUT_WIRED_HEADPHONE:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB;
-            break;
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_SCO:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB;
-            break;
-        case AudioSystem::DEVICE_OUT_AUX_DIGITAL:
-        case AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET:
-        case AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET:
-            dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HEADSET_INCALL_NB;
-            break;
-        default:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB;
-            break;
-        }
-		goto ROUTE;
-    }
-    else if (mode == AudioSystem::MODE_IN_COMMUNICATION) {
-        switch (device & AudioSystem::DEVICE_OUT_ALL) {
-        case AudioSystem::DEVICE_OUT_EARPIECE:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_VOIP_WB;
-            break;
-        case AudioSystem::DEVICE_OUT_SPEAKER:
-            dwNewPath = ES310_PATH_HANDSFREE;
-            dwNewPreset = ES310_PRESET_HANDSFREE_VOIP_WB;
-            break;
-        case AudioSystem::DEVICE_OUT_WIRED_HEADSET:
-            dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HEADSET_VOIP_WB;
-            break;
-        case AudioSystem::DEVICE_OUT_WIRED_HEADPHONE:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_VOIP_WB;
-            break;
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_SCO:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES:
-        case AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_VOIP_WB;
-            break;
-        case AudioSystem::DEVICE_OUT_AUX_DIGITAL:
-        case AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET:
-        case AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET:
-            dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HEADSET_VOIP_WB;
-            break;
-        default:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSET_VOIP_WB;
-            break;
-        }
-		goto ROUTE;
-    }
-        else {
-        switch (device & AudioSystem::DEVICE_IN_ALL)
-        {
-        case AudioSystem::DEVICE_IN_COMMUNICATION:
-            dwNewPath = ES310_PATH_HANDSFREE;
-            dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
-            break;
-        case AudioSystem::DEVICE_IN_AMBIENT:
-            dwNewPath = ES310_PATH_HANDSFREE;
-            dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
-            break;
-        case AudioSystem::DEVICE_IN_BUILTIN_MIC:
-            dwNewPath = ES310_PATH_HANDSET;
-            if (bVRMode)
-                dwNewPreset = ES310_PRESET_VOICE_RECOGNIZTION_WB;
-            else
-                dwNewPreset = ES310_PRESET_ANALOG_BYPASS;
-            break;
-        case AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET:
-            dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
-            break;
-        case AudioSystem::DEVICE_IN_WIRED_HEADSET:
-            dwNewPath = ES310_PATH_HEADSET;
-            dwNewPreset = ES310_PRESET_HEADSET_MIC_ANALOG_BYPASS;
-            break;
-        case AudioSystem::DEVICE_IN_AUX_DIGITAL:
-        case AudioSystem::DEVICE_IN_VOICE_CALL:
-        case AudioSystem::DEVICE_IN_BACK_MIC:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
-            break;
-        default:
-            dwNewPath = ES310_PATH_HANDSET;
-            dwNewPreset = ES310_PRESET_HANDSFREE_REC_WB;
-            break;
-        }
-    }
-ROUTE:
-    if (VNRMode == 1) {
-        ALOGE("Switch to 1-Mic Solution");
-        if (dwNewPreset == ES310_PRESET_HANDSET_INCALL_NB) {
-            dwNewPreset = ES310_PRESET_HANDSET_INCALL_NB_1MIC;
-        }
-        if (dwNewPreset == ES310_PRESET_HANDSET_VOIP_WB) {
-            dwNewPreset = ES310_PRESET_HANDSET_INCALL_VOIP_WB_1MIC;
-        }
-    }
-
-    // set values
-    setES310Mode(dwNewPath);
-    setES310Preset(dwNewPreset);
-
-    return 0;
-}
-#endif
 
 static bool shouldUseHandsetAnc(int flags, int inChannels)
 {
@@ -744,6 +599,24 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     ALOGV("%s: device %#x mode:%d", __FUNCTION__, devices, mode);
 
     if ((mode == AUDIO_MODE_IN_CALL)  || (mode == AUDIO_MODE_IN_COMMUNICATION)) {
+//XIAOMI_START
+#ifdef USE_ES310
+        if (mPrevDevice != 0) {
+            ALOGV("devices & AudioSystem::DEVICE_OUT_ALL:0x%x", devices & AudioSystem::DEVICE_OUT_ALL);
+            if ((devices & AudioSystem::DEVICE_OUT_ALL) == 0) {
+                ALOGE("Should keep previous devices");
+                devices = devices | ((devices & AudioSystem::DEVICE_IN_ALL) | (mPrevDevice & AudioSystem::DEVICE_OUT_ALL));
+                ALOGE("device:%x, 0", devices);
+                if ((devices & AudioSystem::DEVICE_OUT_ALL) == 0) {
+                    ALOGE("set default RX path to earpiece");
+                    devices = devices | (AudioSystem::DEVICE_OUT_EARPIECE);
+                }
+                ALOGE("device:%x, 0-1", devices);
+                goto ROUTE;
+            }
+        }
+#endif
+//XIAOMI_END
         if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
             (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
             devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
@@ -814,6 +687,10 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             ALOGE("SwitchDevice:: Invalid A2DP Combination for mode %d", mode);
         }
     }
+#ifdef USE_ES310
+ROUTE:
+    mPrevDevice  = devices;
+#endif
 #ifdef QCOM_SSR_ENABLED
     if ((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) && ( 6 == handle->channels)) {
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
@@ -838,19 +715,21 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
              (mode == AUDIO_MODE_IN_COMMUNICATION)))
             inCallDevSwitch = true;
     }
+//XIAOMI_START
+#ifdef USE_ES310
+    ALOGV("rxDevice:%s, mCurRxUCMDevice:%s, mode:%d", rxDevice, mCurRxUCMDevice, mode);
+    if (((mode == AUDIO_MODE_IN_CALL) ||(mode == AUDIO_MODE_IN_COMMUNICATION)) &&
+        (strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN))) {
+        mParent->enableAudienceloopback(0);
+    }
+#endif
+//XIAOMI_END
 
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (isPlatformFusion3() && (inCallDevSwitch == true)) {
         if (csd_disable_device == NULL) {
             ALOGE("csd_client_disable_device is NULL");
         } else {
-#ifdef USE_ES310
-        setMixerControl("RX1 Digital Volume",1,0);
-        setMixerControl("RX2 Digital Volume",1,0);
-        setMixerControl("RX3 Digital Volume",1,0);
-        setMixerControl("RX4 Digital Volume",1,0);
-        setMixerControl("IIR1 INP1 MUX", "ZERO");
-#endif
             err = csd_disable_device();
             if (err < 0)
             {
@@ -886,6 +765,11 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                     }
                 }
             }
+//XIAOMI_START
+#ifdef USE_ES310
+            mParent->enableAudienceloopback(0);
+#endif
+//XIAOMI_END
             snd_use_case_set(handle->ucMgr, "_disdev", mCurRxUCMDevice);
         }
     }
@@ -1020,6 +904,11 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 #endif
 
 #ifdef QCOM_CSDCLIENT_ENABLED
+//XIAOMI_START
+#ifdef USE_ES310
+    mParent->doRouting_Audience_Codec(mode, devices, true);
+#endif
+//XIAOMI_END
     if (isPlatformFusion3() && (inCallDevSwitch == true)) {
         if (((rx_dev_id == DEVICE_SPEAKER_MONO_RX_ACDB_ID ) || (rx_dev_id == DEVICE_SPEAKER_STEREO_RX_ACDB_ID ))
          && tx_dev_id == DEVICE_HANDSET_TX_ACDB_ID) {
@@ -1030,9 +919,6 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         if (csd_enable_device == NULL) {
             ALOGE("csd_client_enable_device is NULL");
         } else {
-#ifdef USE_ES310
-        setMixerControl("IIR1 INP1 MUX", "DEC2");
-#endif
             int adjustedFlags = adjustFlagsForCsd(mDevSettingsFlag,
                     mCurRxUCMDevice);
             err = csd_enable_device(rx_dev_id, tx_dev_id, adjustedFlags);
@@ -1041,12 +927,12 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                 ALOGE("csd_enable_device failed, error %d", err);
             }
         }
-    }
-#endif
-
+//XIAOMI_START
 #ifdef USE_ES310
-    ALOGI("es310: txDevice=%s rxDevice=%s", txDevice, rxDevice);
-    setES310Route(mode, devices);
+        mParent->enableAudienceloopback(1);
+#endif
+//XIAOMI_END
+    }
 #endif
 
     if (rxDevice != NULL) {
@@ -1807,6 +1693,16 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
         ALOGV("usecase_type is %d\n", usecase_type);
         if (!(usecase_type & USECASE_TYPE_TX) && (strncmp(mCurTxUCMDevice, "None", 4)))
             snd_use_case_set(handle->ucMgr, "_disdev", mCurTxUCMDevice);
+//XIAOMI_START
+#ifdef USE_ES310
+            int bDuringIncall = mParent->getCallState();
+            ALOGE("disableDevice --> close the Audience, isDuringCall:%d", bDuringIncall);
+            if ((bDuringIncall == false) && (mCallMode == AUDIO_MODE_NORMAL)) {
+                mParent->enableAudienceloopback(0);
+                mParent->doRouting_Audience_Codec( 0, 0, false);
+            }
+#endif
+//XIAOMI_END
         if (!(usecase_type & USECASE_TYPE_RX) && (strncmp(mCurRxUCMDevice, "None", 4)))
             snd_use_case_set(handle->ucMgr, "_disdev", mCurRxUCMDevice);
     } else {
@@ -1836,6 +1732,12 @@ char *ALSADevice::getUCMDeviceFromAcdbId(int acdb_id)
 
 char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
 {
+//XIAOMI_START
+#ifdef USE_ES310
+    ALOGV("CallMode = %d, CallActiveState:%d", mCallMode, mParent->getCallState());
+    int bDuringIncall = mParent->getCallState();
+#endif
+//XIAOMI_END
     if (!input) {
         ALOGV("getUCMDevice for output device: devices:%x is input device:%d",devices,input);
         if (!(mDevSettingsFlag & TTY_OFF) &&
