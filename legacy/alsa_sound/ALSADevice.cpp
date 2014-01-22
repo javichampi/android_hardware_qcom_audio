@@ -1873,6 +1873,9 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                 } else if (mCallMode == AUDIO_MODE_IN_CALL) {
 #else
                 if (mCallMode == AUDIO_MODE_IN_CALL ||
+#ifdef USE_ES310
+                    bDuringIncall == 1 ||
+#endif
                     mCallMode == AUDIO_MODE_IN_COMMUNICATION) {
 #endif
                     return strdup(SND_USE_CASE_DEV_VOC_HEADPHONE); /* Voice HEADSET RX */
