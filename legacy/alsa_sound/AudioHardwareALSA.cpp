@@ -3480,7 +3480,7 @@ status_t AudioHardwareALSA::startPlaybackOnExtOut_l(uint32_t activeUsecase) {
         return err;
     }
     if (activeUsecase != USECASE_NONE && !mIsExtOutEnabled) {
-        Mutex::Autolock autolock1(mExtOutMutex);
+         Mutex::Autolock autolock1(mExtOutMutex);
          err = setProxyProperty(0);
          if(err) {
             ALOGE("Proxy Property Set Failedd");

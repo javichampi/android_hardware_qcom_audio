@@ -1732,12 +1732,6 @@ char *ALSADevice::getUCMDeviceFromAcdbId(int acdb_id)
 
 char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
 {
-//XIAOMI_START
-#ifdef USE_ES310
-    ALOGV("CallMode = %d, CallActiveState:%d", mCallMode, mParent->getCallState());
-    int bDuringIncall = mParent->getCallState();
-#endif
-//XIAOMI_END
     if (!input) {
         ALOGV("getUCMDevice for output device: devices:%x is input device:%d",devices,input);
         if (!(mDevSettingsFlag & TTY_OFF) &&
@@ -2079,7 +2073,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                     }
 #endif
 #ifdef USE_ES310
-					if (mCallMode == AudioSystem::MODE_IN_CALL) {
+					if (mCallMode == AUDIO_MODE_IN_CALL) {
 						return strdup(SND_USE_CASE_DEV_VOC_LINE); /* VOICE BUILTIN-MIC TX */
 					} else {
 						return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */

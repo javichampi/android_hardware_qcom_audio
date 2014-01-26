@@ -227,6 +227,13 @@ void AudioPolicyManager::setStreamMute(int stream,
             ALOGV("setStreamMute() unmuting non muted stream!");
             return;
         }
+//XIAOMI_START
+        if ((stream == 2) || (stream == 4)) {
+           if ((device & 0x8000) != 0) {
+                outputDesc->mMuteCount[stream] = 1;
+            }
+        }
+//XIAOMI_END
         if (--outputDesc->mMuteCount[stream] == 0) {
             checkAndSetVolume(stream,
                               streamDesc.getVolumeIndex(device),
@@ -1190,6 +1197,17 @@ status_t AudioPolicyManager::startInput(audio_io_handle_t input)
     param.addInt(String8("camcorder_mode"), camcorder_enabled);
 
     mpClientInterface->setParameters(input, param.toString());
+//XIAOMI_START
+#ifdef USE_ES310
+    char cVRMode[255];
+    if (aliasSource)
+        strcpy(cVRMode, "1");
+    else
+        strcpy(cVRMode, "0");
+    ALOGV("startInput -> audio.record.vrmode:%s", cVRMode);
+    property_set("audio.record.vrmode", cVRMode);
+#endif
+//XIAOMI_END
 
     inputDesc->mRefCount = 1;
     return NO_ERROR;
