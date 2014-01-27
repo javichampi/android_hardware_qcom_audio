@@ -596,7 +596,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     char *rxDevice, *txDevice, ident[70], *use_case = NULL;
     int err = 0, index, mods_size;
     int rx_dev_id, tx_dev_id;
-    ALOGV("%s: device %#x mode:%d", __FUNCTION__, devices, mode);
+
+    ALOGV("%s: device:0x%x, mPrevDevice:0x%x", __FUNCTION__, devices, mPrevDevice);
 
     if ((mode == AUDIO_MODE_IN_CALL)  || (mode == AUDIO_MODE_IN_COMMUNICATION)) {
 //XIAOMI_START
@@ -906,7 +907,20 @@ ROUTE:
 #ifdef QCOM_CSDCLIENT_ENABLED
 //XIAOMI_START
 #ifdef USE_ES310
-    mParent->doRouting_Audience_Codec(mode, devices, true);
+    unsigned int input_device = 0;
+    if (((devices & AUDIO_DEVICE_IN_ALL) == 0) &&
+        (mCurTxUCMDevice != NULL) &&
+        (mode == AudioSystem::MODE_NORMAL)) {
+        if (!strncmp("Line", mCurTxUCMDevice, MAX_STR_LEN)) {
+            ALOGE("Add Builtin Mic device");
+            input_device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
+        }
+        if (!strncmp("HeadsetMic TX", mCurTxUCMDevice, MAX_STR_LEN)) {
+            ALOGE("Add wired headset device");
+            input_device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
+        }
+    }
+    mParent->doRouting_Audience_Codec(mode, devices | input_device, true);
 #endif
 //XIAOMI_END
     if (isPlatformFusion3() && (inCallDevSwitch == true)) {
@@ -1691,18 +1705,18 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
             }
         }
         ALOGV("usecase_type is %d\n", usecase_type);
-        if (!(usecase_type & USECASE_TYPE_TX) && (strncmp(mCurTxUCMDevice, "None", 4)))
+        if (!(usecase_type & USECASE_TYPE_TX) && (strncmp(mCurTxUCMDevice, "None", 4))) {
             snd_use_case_set(handle->ucMgr, "_disdev", mCurTxUCMDevice);
 //XIAOMI_START
 #ifdef USE_ES310
-            int bDuringIncall = mParent->getCallState();
-            ALOGE("disableDevice --> close the Audience, isDuringCall:%d", bDuringIncall);
-            if ((bDuringIncall == false) && (mCallMode == AUDIO_MODE_NORMAL)) {
+            ALOGV("disableDevice --> close the Audience, isAnyCallActive:%d", mParent->isAnyCallActive());
+            if ((mParent->isAnyCallActive() == false) && (mCallMode == AUDIO_MODE_NORMAL)) {
                 mParent->enableAudienceloopback(0);
                 mParent->doRouting_Audience_Codec( 0, 0, false);
             }
 #endif
 //XIAOMI_END
+        }
         if (!(usecase_type & USECASE_TYPE_RX) && (strncmp(mCurRxUCMDevice, "None", 4)))
             snd_use_case_set(handle->ucMgr, "_disdev", mCurRxUCMDevice);
     } else {

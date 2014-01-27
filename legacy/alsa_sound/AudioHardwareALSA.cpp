@@ -2584,7 +2584,7 @@ status_t AudioHardwareALSA::doRouting_Audience_Codec(int mode, int device, bool 
     bool bVRMode = false;
     char cVRMode[255]="0";
 
-    ALOGD("doRouting_Audience_Codec mode:%d Routes:0x%x Enable:%d.\n", mode, device, enable);
+    ALOGV("doRouting_Audience_Codec mode:%d Routes:0x%x Enable:%d.\n", mode, device, enable);
 
     if (mAudienceCodecInit != 1) {
         ALOGE("Audience Codec not initialized.\n");
@@ -2603,7 +2603,9 @@ status_t AudioHardwareALSA::doRouting_Audience_Codec(int mode, int device, bool 
         goto ROUTE;
     }
 
-    if (((device & AUDIO_DEVICE_OUT_ALL) != 0) && (mode == AudioSystem::MODE_NORMAL))
+    if (((device & AUDIO_DEVICE_IN_ALL) == 0) &&
+        ((device & AUDIO_DEVICE_OUT_ALL) != 0) &&
+        (mode == AudioSystem::MODE_NORMAL))
     {
         ALOGV("doRouting_Audience_Codec: Normal mode, RX no routing ");
         return 0;

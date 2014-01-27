@@ -859,11 +859,6 @@ private:
 
 protected:
     AudioHardwareALSA *     mParent;
-//XIAOMI_START
-#ifdef USE_ES310
-    int mSkipFrame;
-#endif
-//XIAOMI_END
 };
 
 class AudioHardwareALSA : public AudioHardwareBase
@@ -960,7 +955,6 @@ public:
     status_t doRouting_Audience_Codec(int mode, int device, bool enable);
     char* getNameByPresetID(int presetID);
     uint32_t getCurDevice(){ return mCurDevice;};
-    int getCallState(){ return mVoiceCallState;};
     bool    mAudienceCodecInit;
     Mutex mAudioCodecLock;
     int mLoopbackState;
@@ -988,6 +982,7 @@ public:
 
     void pauseIfUseCaseTunnelOrLPA();
     void resumeIfUseCaseTunnelOrLPA();
+    bool         isAnyCallActive();
 
 private:
     status_t     openExtOutput(int device);
@@ -1005,7 +1000,6 @@ private:
     uint32_t     useCaseStringToEnum(const char *usecase);
     void         switchExtOut(int device);
     int          getmCallState(uint32_t vsid, enum call_state state);
-    bool         isAnyCallActive();
     int*         getCallStateForVSID(uint32_t vsid);
     char*        getUcmVerbForVSID(uint32_t vsid);
     char*        getUcmModForVSID(uint32_t vsid);
