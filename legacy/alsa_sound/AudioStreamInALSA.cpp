@@ -131,9 +131,6 @@ AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
 #endif
     }
 #endif
-//XIAOMI_START
-    mSkipFrame = 0;
-//XIAOMI_END
 }
 
 AudioStreamInALSA::~AudioStreamInALSA()
@@ -157,9 +154,6 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     size_t            read = 0;
     char              *use_case;
     int newMode = mParent->mode();
-//XIAOMI_START
-    char *pBuffer_Start  = (char*) buffer;
-//XIAOMI_END
 
     if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
         (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
@@ -380,15 +374,6 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
-//XIAOMI_START
-            char process[128];
-            property_get("sys.foreground_process", process, "");
-            ALOGE("record by process:%s", process);
-            if (!strcmp(process, "com.xiaomi.topic")) {
-                   ALOGV("Drop 200ms to depop the sound");
-                   mSkipFrame = 20;
-            }
-//XIAOMI_END
         }
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
@@ -614,13 +599,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 
         } while (mHandle->handle && read < bytes);
     }
-//XIAOMI_START
-    if (mSkipFrame != 0) {
-        ALOGV(" skip:%d, size:%d", mSkipFrame, bytes);
-        memset((char*)pBuffer_Start, 0,  bytes);
-        mSkipFrame --;
-    }
-//XIAOMI_END
+
     return read;
 }
 
