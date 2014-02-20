@@ -50,6 +50,7 @@ static int (*csd_slow_talk)(uint8_t);
 static int (*csd_fens)(uint8_t);
 static int (*csd_start_voice)(void);
 static int (*csd_stop_voice)(void);
+static int fBoot = 1;
 #endif
 #endif
 #ifdef QCOM_ACDB_ENABLED
@@ -1704,6 +1705,14 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
                 usecase_type |= getUseCaseType(mods_list[i]);
             }
         }
+//XIAOMI_START
+#ifdef USE_ES310
+            if (fBoot == 1) {
+                fBoot = 0;
+                strlcpy(mCurTxUCMDevice, "Line", sizeof(mCurTxUCMDevice));
+            }
+#endif
+//XIAOMI_END
         ALOGV("usecase_type is %d\n", usecase_type);
         if (!(usecase_type & USECASE_TYPE_TX) && (strncmp(mCurTxUCMDevice, "None", 4))) {
             snd_use_case_set(handle->ucMgr, "_disdev", mCurTxUCMDevice);
